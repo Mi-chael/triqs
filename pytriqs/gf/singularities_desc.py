@@ -106,7 +106,7 @@ for Target, Rvt, Rt, ext, n in zip(['scalar_valued', 'matrix_valued', 'tensor_va
         t.add_method("%s transpose()"%c_type, calling_pattern = "auto result = transpose(self_c)")
 
     if Target == "matrix_valued":
-        t.add_method(name = "from_L_G_R", calling_pattern = "self_c = l * (*t) * r",
+        t.add_method(name = "from_L_G_R", calling_pattern = "self_c = l * t * r",
                            signature = "void (matrix<dcomplex> l, %s t, matrix<dcomplex> r)"%c_type)
 
     t.add_method("void zero()", doc = "Sets the expansion to 0")

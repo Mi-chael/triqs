@@ -399,6 +399,8 @@ namespace triqs { namespace py_tools {
 
 template <> struct py_converter<${c.c_type}> {
 
+ using is_wrapped_type = void;// to recognize
+
  template<typename U> static PyObject * c2py(U&& x){
   ${c.py_type} *self;
   self = (${c.py_type} *)${c.py_type}Type.tp_alloc(&${c.py_type}Type, 0);
@@ -486,35 +488,6 @@ template <> struct py_converter<${en.c_name}> {
 }}
 %endfor
 
-//--------------------- Parser auxiliary functions for PyArg_ParseTupleAndKeywords  --------------------------
-
-// adapter needed for parsing with PyArg_ParseTupleAndKeywords later in the functions
-// We need several slighly different version for
-//  - wrapped types : we handle them by pointer
-//  - non wrapped_type : by value
-//  - view : needs to be rebinded, not assigned.
-// Selection of the converter for each type is done later,  Cf _get_proper_converter.
-// take the object a pointer to the place into which convert the object.
-// return 1 (success), 0 (failure). If fails, also set the python exception which will be analyzed later.
-template<typename T>
- static int converter_for_parser_non_wrapped_type(PyObject * ob, T * p) {
-  if (!convertible_from_python<T>(ob,true)) return 0;
-  *p = convert_from_python<T>(ob);
-  return 1;
- }
-template<typename T>
- static int converter_for_parser_wrapped_type(PyObject * ob, T ** p) {
-  if (!convertible_from_python<T>(ob,true)) return 0;
-  *p = &(convert_from_python<T>(ob)); // wrapped types are manipulated by pointers.
-  return 1;
- }
-template<typename T>
- static int converter_for_parser_view_type(PyObject * ob, T * p) {
-  if (!convertible_from_python<T>(ob,true)) return 0;
-  p->rebind(convert_from_python<T>(ob));
-  return 1;
- }
-
 //--------------------- define all functions/methods with args, kwds, including constructors -----------------------------
 
 %for py_meth, module_or_class_name, self_c_type in module._all_args_kw_functions() :
@@ -575,20 +548,24 @@ template<typename T>
      %if not overload._dict_call :
      // define the variable to be filled by the parsing method
      // wrapped types are converted to a pointer, other converted types to a value or a view
-     %for t,n,d in overload.args :
-       %if is_a_wrapped_type(t):
-       ${t}* ${n} = NULL; // ${t} is a wrapped type
-       %elif is_type_a_view(t):
-       ${t} ${n}  = typename ${t}::regular_type{}; // ${t} is a view, but not wrapped
-       %else:
-       ${t} ${n} ${'=%s'%d if d else ''}; //  ${t} is a regular type
-       %endif
+     %for p, (t,n,d) in enumerate(overload.args) :
+     using _type_${p} = std::conditional_t<is_wrapped_v<${t}>, ${t} *, ${t}>;
+     _type_${p} __${n} = ${d if d else '_type_%s{}'%p}; // not default for wrapped type please
      %endfor
      static char *kwlist[] = {${",".join([ '"%s"'%n for t,n,d in overload.args] + ["NULL"])}};
      static const char * format = "${overload._parsing_format()}";
-     if (PyArg_ParseTupleAndKeywords(args, keywds, format, kwlist ${"".join([ module._get_proper_converter(t) + ' ,&%s'%n for t,n,d in overload.args])}))
+     if (PyArg_ParseTupleAndKeywords(args, keywds, format, kwlist
+       	${"".join([ ('' if t in ['double', 'int'] else ',converter_for_parser<'+t+'>') + ' ,&__%s'%n for t,n,d in overload.args])}))
      %endif
      {
+      // redefine the references to remove the * for wrapped type. Allows to use them naturally in C code.
+      %if not overload._dict_call :
+       %for p, (t,n,d) in enumerate(overload.args) :
+       decltype(auto) ${n} = deref_is_wrapped(__${n});
+       static_assert(std::is_reference<decltype(${n})>::value || std::is_pointer<decltype(${n})>::value, "internal error");
+       %endfor
+      %endif
+      
       %if overload.is_method and not overload.is_constructor and not overload.no_self_c and not overload.is_static :
       auto & self_c = convert_from_python<${self_c_type}>(self);
       %endif
@@ -1022,7 +999,7 @@ static PyObject* ${c.py_type}___write_hdf5__ (PyObject *self, PyObject *args) {
 static PyObject* ${c.py_type}___write_hdf5__ (PyObject *self, PyObject *args) {
   triqs::h5::group gr;
   const char * key;
-  if (!PyArg_ParseTuple(args, "O&s", converter_for_parser_non_wrapped_type<triqs::h5::group>, &gr, &key)) return NULL;
+  if (!PyArg_ParseTuple(args, "O&s", converter_for_parser<triqs::h5::group>, &gr, &key)) return NULL;
   auto & self_c = convert_from_python<${c.c_type}>(self);
   try {
    h5_write(gr, key, self_c);

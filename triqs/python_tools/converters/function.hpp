@@ -21,6 +21,28 @@ template <> struct _make_index_seq<3> { using type = index_seq<0, 1, 2>; };
 template <> struct _make_index_seq<4> { using type = index_seq<0, 1, 2, 3>; };
 template <> struct _make_index_seq<5> { using type = index_seq<0, 1, 2, 3, 4>; };
 
+// details
+template <bool B> struct _bool {};
+template <typename T> struct _is_pointer : _bool<false> {};
+template <typename T> struct _is_pointer<T *> : _bool<true> {};
+template <> struct _is_pointer<PyObject  *> : _bool<false> {}; // yes, false, it is a special case...
+
+// adapter needed for parsing with PyArg_ParseTupleAndKeywords later in the functions
+template <typename T> static int converter_for_parser_fnt_(PyObject *ob, T *p, _bool<false>) {
+ if (!py_converter<T>::is_convertible(ob, true)) return 0;
+ *p = std::move(convert_from_python<T>(ob)); // non wrapped types are converted to values, they can be moved !
+ return 1;
+}
+template <typename T> static int converter_for_parser_fnt_(PyObject *ob, T **p, _bool<true>) {
+ if (!convertible_from_python<T>(ob)) return 0;
+ *p = &(convert_from_python<T>(ob));
+ return 1;
+}
+template <typename T> static int converter_for_parser_fnt(PyObject *ob, T *p) {
+ return converter_for_parser_fnt_(ob, p, _is_pointer<T>());
+}
+
+
 template <typename R, typename... T> struct py_converter<std::function<R(T...)>> {
 
  static_assert(sizeof...(T) < 5, "More than 5 variables not implemented");
@@ -67,7 +89,7 @@ template <typename R, typename... T> struct py_converter<std::function<R(T...)>>
  }
  template <int N, typename... U> static int _parse(_int<N>, PyObject *args, arg_tuple_t &tu, U... u) {
   return _parse(_int<N - 1>(), args, tu,
-                converter_for_parser<typename std::tuple_element<N, typename std::decay<arg_tuple_t>::type>::type>,
+                converter_for_parser_fnt<typename std::tuple_element<N, typename std::decay<arg_tuple_t>::type>::type>,
                 &std::get<N>(tu), u...);
  }
 

@@ -89,7 +89,7 @@ tb.add_constructor(signature = "(bravais_lattice latt, PyObject* hopping)",
                      displs.push_back(convert_from_python<std::vector<long>>(key));
                      mats.push_back(convert_from_python<matrix<dcomplex>>(value));
                     }
-                    auto result = tight_binding(*latt, displs, mats);
+                    auto result = tight_binding(latt, displs, mats);
                    """, 
                    doc = " ")
 

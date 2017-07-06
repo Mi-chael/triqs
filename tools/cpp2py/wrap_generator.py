@@ -31,15 +31,6 @@ def translate_c_type_to_py_type(t) :
     # numpy, etc...
     return t
 
-# List of all wrapped types. A priori it should be in module_, but
-# we will have at most one module per file, so I make a global variable
-# otherwise one has to add a "parent" to class_, cfunction, ... to access this
-# list from the parent module
-# We store the name of the type eliminating the whitespaces in them
-_wrapped_types_list = []
-def _add_wrapped_type(t): _wrapped_types_list.append(t.replace(' ',''))
-def _is_a_wrapped_type(t): return t.replace(' ','') in _wrapped_types_list
-
 def _is_type_a_view(c_type):
     """Is c_type a view type ? The criterion is a bit basic ..."""
     return c_type.split('<', 1)[0].strip().endswith("_view") or c_type.endswith("::view_type")
@@ -165,7 +156,9 @@ class cfunction :
       # check that no type is forbidden
       for a in args:
           if is_non_wrappable_type(a[0]): raise ValueError, "The type %s can not be wrapped"%a[0]
-
+      # ensure no variable starts with __
+      for t,n,d in self.args : 
+          assert not n.startswith('__'), "Variables names starting with __ are reserved for internal use"
       #
       assert self.c_name or self._calling_pattern or self.is_constructor, "You must specify a calling_pattern or the signature must contain the name of the function"
       if self.is_constructor :
@@ -188,7 +181,7 @@ class cfunction :
         if self.is_method:
             self_c = "self_c." if not self.is_static else "self_class::"
         # the wrapped types are called by pointer
-        args = ",".join([ ('*' if _is_a_wrapped_type(t) else '') + n for t,n,d in self.args])
+        args = ",".join( n for t,n,d in self.args)
         args = args if self._dict_call is None else "dict_transcript" 
         return "%s %s%s(%s)"%(s,self_c, self.c_name , args)
 
@@ -501,7 +494,7 @@ class class_ :
             the doc string.
         """
         f = cfunction(signature, calling_pattern = calling_pattern, is_constructor = True, is_method = True,  doc = doc)
-        all_args = ",".join([ ('*' if _is_a_wrapped_type(t) else '') + n  for t,n,d in f.args])
+        all_args = ",".join(n  for t,n,d in f.args)
         all_args = all_args if f._dict_call is None else "convert_from_python<%s>(keywds)"%f._dict_call # call with the keywds argument
         f._calling_pattern = '' if f._dict_call is None else "if (!convertible_from_python<%s>(keywds,true)) goto error_return;\n"%f._dict_call
         if calling_pattern is not None :
@@ -735,7 +728,7 @@ class class_ :
     def add_method_copy_from(self) :
         """Add a copy_from, using C++ assignment"""
         # other by pointer, it is necessarly a wrapped type
-        self.add_method(name = "copy_from", calling_pattern = " self_c = *other", signature = 'void(' + self.c_type +" other)", doc = "Assignment")
+        self.add_method(name = "copy_from", calling_pattern = " self_c = other", signature = 'void(' + self.c_type +" other)", doc = "Assignment")
 
     def _prepare_for_generation(self) :
         """Internal :  Called just before the code generation"""
@@ -779,8 +772,6 @@ class module_ :
         """
         if cls.py_type in self.classes : raise IndexError, "The class %s already exists"%cls.py_type
         self.classes[cls.py_type] = cls
-        _add_wrapped_type(cls.c_type)
-        _add_wrapped_type(cls.c_type_absolute)  # we can call is by its name or its absolute name
 
     def add_function(self, signature, name =None, calling_pattern = None, python_precall = None, python_postcall = None, doc = '', release_GIL_and_enable_signal = False):
         """
@@ -874,7 +865,6 @@ class module_ :
           Name of the application where the module is defined
           From the name of the module :
            - add the header file generated for this module to the C++ include list
-           - read this file, update the list of _wrapped_types_list, and add it to the wrapped_type list.
         """
         f = None
         if app_name is not None: self.module_path_list.append(install_dir+"/include/"+app_name+"/py_converters/")
@@ -885,19 +875,11 @@ class module_ :
               break
         if not f : raise RuntimeError, "Cannot find the module %s.\n  ... module_path_list = %s"%(modulename, self.module_path_list)
 
-        while f.readline().strip() != "// WrappedTypeList" :
-            pass
-        l = f.readline()[3:] # // strip "// "
-        global _wrapped_types_list
-        _wrapped_types_list += eval(l)
         if app_name is None:
          self.add_include("~"+hppfile)
          self.add_include('_<'+self.app_name+ '/py_converters/' +  modulename + '.hpp>')
         else:
          self.add_include('<'+app_name+ '/py_converters/' +  modulename + '.hpp>')
-        #print "Loading triqs wrapped module %s"%modulename
-        #print " ...  found C++ header file %s"%hppfile
-        #print " ...  found wrapped types %s"%l
 
     class _enum :
         def __init__(self, c_name, values, c_namespace, doc) :
@@ -922,12 +904,6 @@ class module_ :
         """
         self.enums.append( self._enum(c_name, values, c_namespace, doc))
 
-    def _get_proper_converter(self, t) :
-        if t in basic_types_formatting : return ''
-        if _is_a_wrapped_type(t) : return ',converter_for_parser_wrapped_type<'+t+'>'
-        if t.split('<',1)[0].strip().endswith("_view") : return ',converter_for_parser_view_type<'+t+'>'
-        return ',converter_for_parser_non_wrapped_type<'+t+'>'
-
     def _all_args_kw_functions(self) :
         l = [ (f, self.name, None) for f in self.functions.values()]
         for c in self.classes.values() :
@@ -950,7 +926,7 @@ class module_ :
         self._prepare_for_generation()
         tpl = Template(filename=mako_template)
         rendered = tpl.render(module=self, regular_type_if_view_else_type= _regular_type_if_view_else_type, is_type_a_view = _is_type_a_view,
-                   is_a_wrapped_type = _is_a_wrapped_type, python_function = python_function)
+                   python_function = python_function)
         with open(wrap_file,'w') as f:
            f.write(rendered)
 
@@ -966,7 +942,7 @@ class module_ :
         prepend_app_name=None
         if wrap_file.endswith(".to_be_installed"):
           prepend_app_name=self.app_name
-        rendered = tpl.render(module=self, prepend_app_name=prepend_app_name, wrapped_types_list = _wrapped_types_list)
+        rendered = tpl.render(module=self, prepend_app_name=prepend_app_name)
         with open(wrap_file,'w') as f:
            f.write(rendered)
 

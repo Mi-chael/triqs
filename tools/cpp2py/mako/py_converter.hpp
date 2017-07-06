@@ -1,8 +1,6 @@
 // Specialization of py_converter to types wrapped by the wrap_generator.
 // DO NOT EDIT. Generated automatically by wrap_generator
 // We store here the list of the C++ converted types for use in another module
-// WrappedTypeList
-// ${list(set(wrapped_types_list))}
 //
 #pragma once
 // in case it is included in the module ${module.full_name}.so, we do not want this specialization
@@ -40,6 +38,8 @@ namespace triqs { namespace py_tools {
 
 template<> struct py_converter<${c.c_type_absolute}> { 
 
+  using is_wrapped_type = void;// to recognize
+ 
   static void ** init() {
    PyObject * mod =  PyImport_ImportModule("${module.full_name}");
    if (mod ==NULL) return NULL;

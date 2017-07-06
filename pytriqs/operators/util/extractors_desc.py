@@ -26,7 +26,7 @@ using triqs::tuple::map;
 module.add_function("dict2_t<real_or_complex> extract_h_dict(many_body_operator H, bool ignore_irrelevant = false)",
                     calling_pattern = """
                     std::map<std::tuple<indices_t_t,indices_t_t>,real_or_complex> result;
-                    for(auto const& kv : extract_h_dict(*H,ignore_irrelevant)) result[map(v2t,kv.first)] = kv.second;
+                    for(auto const& kv : extract_h_dict(H,ignore_irrelevant)) result[map(v2t,kv.first)] = kv.second;
                     """,
                     doc = r"""
     Extract coefficients of the quadratic part :math:`\sum_{ij}h_{ij} c^\dagger_i c_j` from a Hamiltonian H as a 2-index dictionary.
@@ -49,7 +49,7 @@ module.add_function("dict2_t<real_or_complex> extract_h_dict(many_body_operator 
 module.add_function("dict2_t<real_or_complex> extract_U_dict2(many_body_operator H, bool ignore_irrelevant = false)",
                     calling_pattern = """
                     std::map<std::tuple<indices_t_t,indices_t_t>,real_or_complex> result;
-                    for(auto const& kv : extract_U_dict2(*H,ignore_irrelevant)) result[map(v2t,kv.first)] = kv.second;
+                    for(auto const& kv : extract_U_dict2(H,ignore_irrelevant)) result[map(v2t,kv.first)] = kv.second;
                     """,
                     doc = r"""
     Extract U-matrix of the density-density interaction part :math:`\frac{1}{2}\sum_{ij} U_{ij} n_i n_j`
@@ -73,7 +73,7 @@ module.add_function("dict2_t<real_or_complex> extract_U_dict2(many_body_operator
 module.add_function("dict4_t<real_or_complex> extract_U_dict4(many_body_operator H, bool ignore_irrelevant = false)",
                     calling_pattern = """
                     std::map<std::tuple<indices_t_t,indices_t_t,indices_t_t,indices_t_t>,real_or_complex> result;
-                    for(auto const& kv : extract_U_dict4(*H,ignore_irrelevant)) result[map(v2t,kv.first)] = kv.second;
+                    for(auto const& kv : extract_U_dict4(H,ignore_irrelevant)) result[map(v2t,kv.first)] = kv.second;
                     """,
                     doc = r"""
     Extract U-matrix of the interaction part :math:`\frac{1}{2}\sum_{ijkl} U_{ijkl} c^\dagger_i c^\dagger_j c_l c_k`

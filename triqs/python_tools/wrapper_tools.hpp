@@ -44,7 +44,7 @@ namespace triqs { namespace py_tools {
 // py2c behaviour is undefined is is_convertible return false
 // c2py should return NULL on failure
 template<typename T> struct py_converter;
- //{
+ //{ 
  //  static PyObject * c2py(T const & x);
  //  static T & py2c(PyObject * ob);
  //  static bool is_convertible(PyObject * ob, bool raise_exception);
@@ -64,34 +64,81 @@ template <typename T> static PyObject *convert_to_python(T &&x) {
  static_assert(does_have_a_converterC2Py<T>::value, "The type does not have a converter from C++ to Python");
  return py_converter<std14::decay_t<T>>::c2py(std::forward<T>(x));
 }
-template <typename T> static auto convert_from_python(PyObject *ob) -> decltype(py_converter<T>::py2c(ob)) {
- static_assert(does_have_a_converterPy2C<T>::value, "The type does not have a converter from Python to C++");
- return py_converter<T>::py2c(ob);
-}
 template <typename T> static bool convertible_from_python(PyObject *ob, bool raise_exception) {
  return py_converter<T>::is_convertible(ob, raise_exception);
 }
 
-// details
-template <bool B> struct _bool {};
-template <typename T> struct _is_pointer : _bool<false> {};
-template <typename T> struct _is_pointer<T *> : _bool<true> {};
-template <> struct _is_pointer<PyObject  *> : _bool<false> {}; // yes, false, it is a special case...
+/*
+ * type          T            py_converter<T>::p2yc     convert_from_python<T>   converter_for_parser type of p      impl
+ *                                                 
+ * regular       R            R or R&& or R const&      R  or R&& or R const&    R*                                *p = py_converter<T>::p2yc(ob))
+ * view          V            V                         V                        V*                                p->rebind(py_converter<T>::p2yc(ob))
+ * wrapped       W            W *                       W                        W**                               *p = py_converter<T>::p2yc(ob))  
+ * wrapped view  WV           WV *                      WV                       WV**                              p->rebind(py_converter<T>::p2yc(ob))
+ * PyObejct *    PyObject *   PyObject *                PyObject *               PyObject **                       *p = py_converter<T>::p2yc(ob))  
+ * U*            U*           U*                        U*                       U**                               *p = py_converter<T>::p2yc(ob)) 
+ *
+ */ 
 
-// adapter needed for parsing with PyArg_ParseTupleAndKeywords later in the functions
-template <typename T> static int converter_for_parser_(PyObject *ob, T *p, _bool<false>) {
- if (!py_converter<T>::is_convertible(ob, true)) return 0;
- *p = std::move(convert_from_python<T>(ob)); // non wrapped types are converted to values, they can be moved !
- return 1;
+// is_wrapped<T>  if py_converter has been reimplemented.
+template<typename T, class = void> struct is_wrapped : std::false_type{};
+template<typename T> struct is_wrapped<T, typename py_converter<T>::is_wrapped_type> : std::true_type{};
+
+template<typename T> inline constexpr bool is_wrapped_v = is_wrapped<T>::value;
+
+template <typename T> static auto convert_from_python(PyObject *ob) -> decltype(py_converter<T>::py2c(ob)) {
+ static_assert(does_have_a_converterPy2C<T>::value, "The type does not have a converter from Python to C++");
+ return py_converter<T>::py2c(ob);
 }
-template <typename T> static int converter_for_parser_(PyObject *ob, T **p, _bool<true>) {
- if (!convertible_from_python<T>(ob)) return 0;
- *p = &(convert_from_python<T>(ob));
- return 1;
+
+/*template<typename T> static auto & convert_from_python_helper(PyObject * ob, std::true_type) { 
+  return *py_converter<T>::py2c(ob);
 }
-template <typename T> static int converter_for_parser(PyObject *ob, T *p) {
- return converter_for_parser_(ob, p, _is_pointer<T>());
+template<typename T> static auto convert_from_python_helper(PyObject * ob, std::false_type) -> decltype(py_converter<T>::py2c(ob))  { 
+  return py_converter<T>::py2c(ob);
 }
+template <typename T> static auto convert_from_python(PyObject *ob) -> decltype(convert_from_python_helper<T>(ob , is_wrapped<T>{})){ 
+ static_assert(does_have_a_converterPy2C<T>::value, "The type does not have a converter from Python to C++");
+ return convert_from_python_helper<T>(ob , is_wrapped<T>{});
+}
+*/
+
+ // TODO C17 : if constexpr
+ // used by PyParse_xxx : U is a pointer iif we have a wrapped object.
+ template<typename T> 
+ static void converter_for_parser_dispatch(PyObject * ob, T * p, std::false_type, std::false_type) { 
+  *p = py_converter<T>::py2c(ob);
+ }
+ template<typename T> 
+ static void converter_for_parser_dispatch(PyObject * ob, T * p, std::false_type, std::true_type) { 
+  p->rebind(py_converter<T>::py2c(ob));
+ }
+ template<typename T>
+ static void converter_for_parser_dispatch(PyObject * ob, T ** p, std::true_type, std::false_type) {
+  *p = &py_converter<T>::py2c(ob);
+ }
+ template<typename T>
+ static void converter_for_parser_dispatch(PyObject * ob, T ** p, std::true_type, std::true_type) {
+  *p = &py_converter<T>::py2c(ob);
+ }
+
+ template<typename T> 
+  static int converter_for_parser(PyObject * ob, std::conditional_t<is_wrapped_v<T>, T*, T> * p) {
+   if (!convertible_from_python<T>(ob,true)) return 0;
+   converter_for_parser_dispatch(ob, p, is_wrapped<T>{}, triqs::is_view<T>{} );
+   return 1;
+ }
+
+// pointer -> ref except PyObject *. We assume here that there is no 
+// converter py_converter<U*>. The dereference should be only for wrapped type. Check by static_assert
+// Generalize if needed.
+inline PyObject * deref_is_wrapped(PyObject * x) { return x;}
+template <typename T> auto & deref_is_wrapped(T* x) { 
+ static_assert(is_wrapped<T>::value, "Internal assumption invalid");
+ return *x;
+}
+template <typename T> auto & deref_is_wrapped(T& x) { return x;}
+
 
 // -----------------------------------
 //    Tools for the implementation of reduce (V2)
