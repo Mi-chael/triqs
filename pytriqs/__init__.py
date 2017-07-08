@@ -21,7 +21,7 @@
 ################################################################################
 
 __all__ = ['archive', 'dos', 'fit', 'gf', 'lattice', 'operators', 'plot',
-           'random_generator', 'sumk', 'utility', 'cpp2py']
+           'random_generator', 'sumk', 'utility']
 
 import sys
 if 'additional_builtin_modules' in dir(sys) :

@@ -137,11 +137,15 @@ class Function(object):
                                    CursorKind.CHARACTER_LITERAL, CursorKind.STRING_LITERAL,
                                    CursorKind.UNARY_OPERATOR, CursorKind.UNEXPOSED_EXPR,
                                    CursorKind.CXX_BOOL_LITERAL_EXPR, CursorKind.CALL_EXPR ] :
+                        # apparently a bug before clang 4
+                        # Should switch on clang version ??
                         #default_value =  ch.get_tokens().next().spelling
-                        default_value =  ''.join([x.spelling for x in ch.get_tokens()][:-1])
+                        #default_value =  ''.join([x.spelling for x in ch.get_tokens()][:-1])
                         # if the default value is a = A{} or = {}, need to clean
                         # the = in front of it (why ??).
-                        default_value = default_value.strip(' =')
+                        #default_value = default_value.strip(' =')
+                        default_value =  ''.join([x.spelling for x in ch.get_tokens()])
+                        
                 t = type_(c.type)
 
                 # We look if this argument is a parameter class...

@@ -1,11 +1,14 @@
 #!@PYTHON_INTERPRETER@
+import os, re, sys
 
+script_path = os.path.dirname(os.path.abspath( __file__ ))
+sys.path.append(script_path)
+sys.path.append(script_path + '/..')  # Fix this !
+
+import config
+import cpp2py.util as util
 from clang_parser import parse
-import os, re
 from mako.template import Template
-import sys
-sys.path.append('@CMAKE_INSTALL_PREFIX@/share/triqs')
-from cpp2py.util import replace_latex
 
 # the instruction that created this file
 shell_command = ' '.join( [ sys.argv[0].rsplit('/')[-1]] + [x if ' ' not in x else '"%s"'%x for x in sys.argv[1:]])
@@ -33,19 +36,20 @@ parser.add_argument('--properties', '-p',  action='store_true',
 parser.add_argument('--members_read_only',  action='store_true',
         help="""Makes members read only (only the getter, not the setter) """)
 
-parser.add_argument('--libclang_location', help='Location of the libclang', default = '@TRIQS_LIBCLANG_LOCATION@')
+parser.add_argument('--libclang_location', help='Location of the libclang', default = config.LIBCLANG_LOCATION)
 parser.add_argument('--compiler_options', nargs ='*', help='Options to pass to clang')
 parser.add_argument('--includes', '-I', action='append',  help='Includes to pass to clang')
-parser.add_argument('--only_converters',  action='store_true',
-        help="[Experts only] Do not generate the desc file, just the converters if there are")
+parser.add_argument('--only_converters',  action='store_true', help="[Experts only] Do not generate the desc file, just the converters if there are")
 parser.add_argument('--namespace', '-N', action='append',  help="Specify the namespace to explore for classes and function to wrap", default= [])
 parser.add_argument('--only', action='append',  help="Specify functions or class to be wrapped", default= [])
 
 args = parser.parse_args()
-args.includes = (args.includes or []) +  '@TRIQS_INCLUDE_ALL@'.split(';')
 
-triqs_install_location = '@CMAKE_INSTALL_PREFIX@'
-args.includes.append(triqs_install_location + '/include')
+args.includes = (args.includes or []) +  config.TRIQS_INCLUDE_DEPS.split(';')
+args.includes.append(config.TRIQS_INCLUDE)
+
+# -------- compiler options
+compiler_options = (args.compiler_options or []) + ["-std=c++14"] + ['-I%s'%x for x in args.includes] + config.LIBCLANG_CXX_ADDITIONAL_FLAGS.strip().split()
 
 #------------
 
@@ -69,13 +73,6 @@ def decay(s) :
     return s.strip()
 
 if __name__ == '__main__' :
-
-    compiler_options = args.compiler_options or []
-    compiler_options.append("-std=c++14")
-    compiler_options += ['-I%s'%x for x in args.includes]
-    add_opts = '@TRIQS_LIBCLANG_CXX_ADDITIONAL_FLAGS@'.strip()
-    if add_opts:
-        compiler_options += add_opts.split()
 
     # possible filters
     def ns_has_ignore(ns) :
@@ -149,13 +146,13 @@ if __name__ == '__main__' :
     if classes_of_parameters :
         print "Generating the converters for parameters classes : " + ', '.join([c.name for c in classes_of_parameters])
         # Generate the converter code for all the classes.
-        tpl = Template(filename=triqs_install_location + '/share/triqs/cpp2py/mako/converters.hxx')
+        tpl = Template(filename=script_path + '/mako/converters.hxx')
         rendered = tpl.render(classes = classes_of_parameters, args = args, shell_command= shell_command )
         with open("{output_name}_converters.hxx".format(output_name=output_name), "w") as f:
             f.write(clean_end_white_char(rendered))
 
         # Generate the rst file of the doc
-        tpl = Template(filename=triqs_install_location + '/share/triqs/cpp2py/mako/parameters.rst')
+        tpl = Template(filename=script_path + '/mako/parameters.rst')
         rendered = tpl.render(classes = classes_of_parameters, args = args, shell_command= shell_command )
         with open("{output_name}_parameters.rst".format(output_name=output_name), "w") as f:
             f.write(clean_end_white_char(rendered))
@@ -164,7 +161,7 @@ if __name__ == '__main__' :
 
     # Making the desc file
     if not args.only_converters:
-        tpl = Template(filename=triqs_install_location + '/share/triqs/cpp2py/mako/xxx_desc.py')
+        tpl = Template(filename=script_path + '/mako/xxx_desc.py')
         rendered = tpl.render(classes = classes, functions = functions, modulename=modulename,  appname = appname,
                      moduledoc=args.moduledoc, args = args,
                      shell_command= shell_command, classes_of_parameters = classes_of_parameters  )

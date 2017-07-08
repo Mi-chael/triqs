@@ -1,6 +1,3 @@
-// DO NOT EDIT
-// Generated automatically using libclang using the command : 
-// ${shell_command}
 %for c in classes :
 <%
   def name_lmax(member_list) : 
