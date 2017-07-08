@@ -3,8 +3,9 @@ import re
 
 # This modules contains utilities that will only be called internally, not by users.
 m = module_(full_name = "pytriqs.gf.wrapped_aux", doc = "C++ wrapping of functions on Green functions ...", app_name="triqs")
-m.use_module('meshes')
-m.use_module('singularities')
+
+import meshes
+import singularities
 
 #m.add_include("<triqs/gfs.hpp>")
 #m.add_include("<triqs/gfs/singularity/fit_tail.hpp>")
@@ -68,8 +69,9 @@ for var, return_t, R, target_t, point_t in all_calls():
     c = class_( 
             py_type = "CallProxy%s_%s"%(C_py_transcript[var],R),
             c_type = c_type,
-            c_type_absolute = "triqs::gfs::" + c_type
-           )
+            c_type_absolute = "triqs::gfs::" + c_type,
+            export = False
+            )
     c.add_constructor("(gf_view<%s,%s> g)"%(var, target_t), doc = "")
     c.add_call(signature = "%s call(%s x)"%(return_t, point_t), doc = "")
     m.add_class (c)

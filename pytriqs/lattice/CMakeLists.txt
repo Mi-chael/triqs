@@ -10,5 +10,5 @@ install (FILES ${CMAKE_SOURCE_DIR}/pytriqs/__init__.py.template DESTINATION "inc
 install (FILES ${PYTHON_SOURCES} DESTINATION ${TRIQS_PYTHON_LIB_DEST}/lattice)
 
 # Build C extension module 
-triqs_python_extension(lattice_tools lattice)
+triqs_python_extension(lattice_tools)
 

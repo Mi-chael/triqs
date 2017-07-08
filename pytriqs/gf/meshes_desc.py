@@ -1,8 +1,9 @@
 from wrap_generator import *
 import re
 
+import pytriqs.lattice 
+
 module = module_(full_name = "pytriqs.gf.meshes", doc = "All the meshes", app_name="triqs")
-module.use_module('lattice_tools')
 module.add_include("<triqs/gfs.hpp>")
 module.add_include("<triqs/python_tools/converters/string.hpp>")
 module.add_include("<triqs/python_tools/converters/arrays.hpp>")

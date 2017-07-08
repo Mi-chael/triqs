@@ -1,8 +1,9 @@
 from wrap_generator import *
 import re
 
+import pytriqs.lattice 
+ 
 module = module_(full_name = "pytriqs.gf.singularities", doc = "Wrapped ...", app_name="triqs")
-module.use_module('lattice_tools')
 module.add_include("<triqs/gfs.hpp>")
 module.add_include("<triqs/gfs/singularity/fit_tail.hpp>")
 #module.add_include("<triqs/gfs/transform/pade.hpp>")

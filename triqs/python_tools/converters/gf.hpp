@@ -4,10 +4,6 @@
 #include "./gf_details.hpp"
 #include "./mesh_product.hpp"
 
-// IS IS Necessary ?
-#include <triqs/py_converters/meshes.hpp>
-#include <triqs/py_converters/singularities.hpp>
-
 /// Additional converters for gf
 //
 namespace triqs {

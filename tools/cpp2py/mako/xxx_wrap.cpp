@@ -1,6 +1,138 @@
+#include<complex>
+#include<iostream> //for std::cout...
+using dcomplex = std::complex<double>;
+
+#include <triqs/python_tools/wrapper_tools.hpp>
+
+//------------------------------------------------------------------------------------------------------
+//---------------------  First all the classes and enums wrapped by imported modules -------------------
+//------------------------------------------------------------------------------------------------------
+
+<%
+  cpp2py_imported_modules = [m for n, m in sys_modules.items() if hasattr(m,'_get_cpp2py_wrapped_class_enums')]
+%>  
+
+%for M in cpp2py_imported_modules:
+ <% 
+   d = M._get_cpp2py_wrapped_class_enums() 
+   module_name = d['module_name']
+   wrapped_cls = eval(d['classes'])
+   wrapped_ens = eval(d['enums'])
+   includes = eval(d['includes'])
+ %>
+
+//--------------------- includes of the imported modules
+
+ %for inc in includes :
+#include ${inc}
+ %endfor
+
+namespace triqs { namespace py_tools { 
+
+//--------------------- Converters of classes --------------------------
+ 
+%for n,(c_type_absolute, implement_regular_type_converter) in enumerate(wrapped_cls) :
+
+template<> struct py_converter<${c_type_absolute}> { 
+
+  using is_wrapped_type = void;// to recognize
+ 
+  static void ** init() {
+   PyObject * mod =  PyImport_ImportModule("${module_name}");
+   if (mod ==NULL) return NULL;
+   pyref capsule =  PyObject_GetAttrString(mod,  "_exported_wrapper_convert_fnt");
+   if (capsule.is_null()) {
+     PyErr_SetString(PyExc_RuntimeError, "TRIQS: can not find _exported_wrapper_convert_fnt in the module ${module_name}");
+     return NULL;
+   }
+   void ** table = (void**) PyCapsule_GetPointer(capsule, "${module_name}._exported_wrapper_convert_fnt");
+   return table;
+ }
+ 
+  static PyObject * c2py(${c_type_absolute} const & x){
+   static void **wrapped_convert_fnt = init();
+   if (wrapped_convert_fnt == NULL) return NULL;
+   return ((PyObject * (*)(${c_type_absolute} const &)) wrapped_convert_fnt[3*${n}])(x);
+ }
+ 
+  static ${c_type_absolute}& py2c(PyObject * ob){
+   static void **wrapped_convert_fnt = init();
+   if (wrapped_convert_fnt == NULL) std::terminate(); // It should never happen since py2c is called only is is_convertible is true (py_converter specs) 
+   return ((${c_type_absolute}& (*)(PyObject *)) wrapped_convert_fnt[3*${n}+1])(ob);
+ }
+ 
+  static bool is_convertible(PyObject *ob, bool raise_exception) {
+   static void **wrapped_convert_fnt = init();
+   if (wrapped_convert_fnt == NULL) {
+    if (!raise_exception && PyErr_Occurred()) {PyErr_Print();PyErr_Clear();}
+    return false;
+   }
+   return ((bool (*)(PyObject *,bool)) wrapped_convert_fnt[3*${n}+2])(ob,raise_exception);
+ }
+};
+
+%if implement_regular_type_converter : 
+ template<> struct py_converter<${c_type_absolute}::regular_type> {
+ using regular_type = ${c_type_absolute}::regular_type;
+ using conv = py_converter<${c_type_absolute}>;
+ static PyObject *c2py(regular_type &g) { return conv::c2py(g); }
+ static PyObject *c2py(regular_type &&g) { return conv::c2py(g); }
+ static bool is_convertible(PyObject * ob, bool raise_exception) { return conv::is_convertible(ob, raise_exception); }
+ static regular_type py2c(PyObject *ob) { return conv::py2c(ob); }
+};
+
+%endif
+
+%endfor
+## end loop on classes
+
+//--------------------- Converters of enums --------------------------
+
+%for (c_name_absolute, c_namespace, values) in wrapped_ens: 
+
+template <> struct py_converter<${c_name_absolute}> {
+ static PyObject * c2py(${c_name_absolute} x) {
+   %for n,val in enumerate(values[:-1]) :
+    if (x == ${c_namespace}${val}) return PyString_FromString("${val}");
+   %endfor
+   return PyString_FromString("${values[-1]}"); // last case separate to avoid no return warning of compiler
+ }
+ static ${c_name_absolute} py2c(PyObject * ob){
+   std::string s=PyString_AsString(ob);
+   %for n,val in enumerate(values[:-1]) :
+    if (s == "${val}") return ${c_namespace}${val};
+   %endfor
+   return ${c_namespace}${values[-1]};
+ }
+ static bool is_convertible(PyObject *ob, bool raise_exception) {
+   if (!PyString_Check(ob))  {
+     if (raise_exception) PyErr_SetString(PyExc_ValueError, "Convertion of C++ enum ${c_name_absolute} : the object is not a string");
+     return false;
+   }
+   std::string s=PyString_AsString(ob);
+   %for n,val in enumerate(values) :
+    if (s == "${val}") return true;
+   %endfor
+   if (raise_exception) {
+    auto err = "Convertion of C++ enum ${c_name_absolute} : \nThe string \"" + s +"\" is not in [${','.join([str(x) for x in values])}]";
+    PyErr_SetString(PyExc_ValueError, err.c_str());
+   }
+   return false;
+ }
+};
+
+%endfor
+## end loop on enums
+}} // namespace triqs::py_tools
+%endfor
+## END LOOP ON IMPORTED MODULES
+
+//------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------
+
 //--------------------- includes and using  -------------------------------------
 #define TRIQS_PYTHON_WRAPPER_MODULE_${module.name}
-#include <triqs/utility/first_include.hpp>
+//#include <triqs/utility/first_include.hpp>
 
 %for file in module.include_list :
 %if file.startswith('<'):
@@ -14,15 +146,9 @@
 %endif
 %endfor
 
-#include<complex>
-#include<iostream> //for std::cout...
-using dcomplex = std::complex<double>;
-
 %for ns in module.using:
 using ${ns};
 %endfor
-
-#include <triqs/python_tools/wrapper_tools.hpp>
 
 // always included
 #include <triqs/python_tools/converters/string.hpp>
@@ -1131,6 +1257,25 @@ PyObject* ${c.py_type}___iter__(PyObject *self) {
 
 %endfor  ## Big loop on classes c
 
+
+//--------------------- function returning the list of classes, enum wrapped  -----------------------------
+
+ static PyObject* _get_cpp2py_wrapped_class_enums(PyObject *self, PyObject *args, PyObject *keywds) {
+
+  PyObject * d = PyDict_New();
+
+  static const char * cls = "${repr( [ (c.c_type_absolute, c.implement_regular_type_converter) for c in module.classes.values() if c.export])}";
+  static const char * ens = "${repr( [ (en.c_name_absolute, en.c_namespace, en.values) for en in module.enums] )}"; 
+  static const char * inclu = "${repr( module.include_list)}"; 
+  
+  PyDict_SetItemString(d, "classes", pyref(PyString_FromString(cls)));
+  PyDict_SetItemString(d, "enums", pyref(PyString_FromString(ens)));
+  PyDict_SetItemString(d, "module_name", pyref(PyString_FromString("${module.full_name}")));
+  PyDict_SetItemString(d, "includes", pyref(PyString_FromString(inclu)));
+
+  return d;
+ }
+ 
 //------------------------------------------------------------------------
 //---------------------    MODULE  --------- -----------------------------
 //------------------------------------------------------------------------
@@ -1148,6 +1293,7 @@ static PyMethodDef module_methods[] = {
     {"__reduce_reconstructor__${c.py_type}", (PyCFunction)${c.py_type}___reduce_reconstructor__, METH_VARARGS, "Internal " },
 %endif
 %endfor
+    {"_get_cpp2py_wrapped_class_enums", (PyCFunction)_get_cpp2py_wrapped_class_enums, METH_VARARGS, "[Internal] Returns the list of wrapped objects  " },
 
 {NULL}  /* Sentinel */
 };
@@ -1203,12 +1349,14 @@ init${module.name}(void)
     register_h5_reader_for_${c.py_type}();
 %endfor
 
-%if len(module.classes) >0 :
+   // write the export table for classes (enums) that have to be exported
+<% classes_to_export =  [c for c in module.classes.values() if c.export] %>
+%if len(classes_to_export) >0 :
      // declare the exported wrapper functions
-     static void * _exported_wrapped_convert_fnt[3*${len(module.classes)}];
+     static void * _exported_wrapped_convert_fnt[3*${len(classes_to_export)}];
 
-     // init the array with the function pointers
-     %for n,c in enumerate(module.classes.values()) :
+     // init the array with the function pointers for classes to be exported
+     %for n,c in enumerate(classes_to_export):
        _exported_wrapped_convert_fnt[3*${n}] = (void *)convert_to_python<${c.c_type_absolute}>;
        _exported_wrapped_convert_fnt[3*${n}+1] = (void *)convert_from_python<${c.c_type_absolute}>;
        _exported_wrapped_convert_fnt[3*${n}+2] = (void *)convertible_from_python<${c.c_type_absolute}>;
@@ -1219,6 +1367,7 @@ init${module.name}(void)
     if (c_api_object != NULL) PyModule_AddObject(m, "_exported_wrapper_convert_fnt", c_api_object);
 %endif
 
+   // add eventually the python function 
    %if len(module.python_functions) + len(module.hidden_python_functions) > 0 :
 
     PyObject* main_module = PyImport_AddModule("__main__"); //borrowed
@@ -1239,6 +1388,7 @@ init${module.name}(void)
      if (!PyRun_String( _module_hidden_python_function_code_${f.name}, Py_file_input, global_dict ,d)) return;
     %endfor
    %endif
+   // END
 }
 
 

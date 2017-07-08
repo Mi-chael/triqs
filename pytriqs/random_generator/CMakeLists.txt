@@ -5,5 +5,5 @@ SET(PYTHON_SOURCES
 install (FILES ${PYTHON_SOURCES} DESTINATION ${TRIQS_PYTHON_LIB_DEST}/random_generator)
 
 # Build C extension module 
-triqs_python_extension(random_generator random_generator)
+triqs_python_extension(random_generator)
 

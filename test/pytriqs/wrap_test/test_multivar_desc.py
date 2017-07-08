@@ -1,9 +1,9 @@
 from wrap_generator import *
 
+import pytriqs.gf
+
 # The module
 module = module_(full_name = "pytriqs.wrap_test.test_multivar", doc = "Doc of multivar GF")
-
-module.use_module('meshes', 'triqs')
 
 module.add_include("multivar.hpp")
 module.add_include("<triqs/python_tools/converters/block_gf.hpp>")

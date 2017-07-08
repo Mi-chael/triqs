@@ -3,8 +3,8 @@
 # same as for pytriqs
 FILE(GLOB_RECURSE all_py_files RELATIVE ${CMAKE_SOURCE_DIR}/tools *.py)
 SET(tools_copy_tar ${CMAKE_BINARY_DIR}/tools_copy.tar)
-add_custom_command (OUTPUT ${tools_copy_tar} DEPENDS ${all_py_files}
- COMMAND cd ${CMAKE_SOURCE_DIR}/tools && ${CMAKE_COMMAND} -E tar cf ${tools_copy_tar} ${all_py_files} &&
+add_custom_command (OUTPUT ${tools_copy_tar} DEPENDS ${all_py_files} 
+ COMMAND cd ${CMAKE_SOURCE_DIR}/tools && ${CMAKE_COMMAND} -E tar cf ${tools_copy_tar} ${all_py_files} cpp2py/mako cpp2doc/mako &&
          cd ${CMAKE_BINARY_DIR}/tools && ${CMAKE_COMMAND} -E tar xf ${tools_copy_tar})
 add_custom_target(tools_copy ALL DEPENDS ${tools_copy_tar})
 
@@ -13,7 +13,6 @@ add_custom_target(tools_copy ALL DEPENDS ${tools_copy_tar})
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp2py/util.py                    DESTINATION  share/triqs/cpp2py)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp2py/__init__.py                DESTINATION  share/triqs/cpp2py)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp2py/wrap_generator.py          DESTINATION  share/triqs/cpp2py)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp2py/mako/py_converter.hpp      DESTINATION  share/triqs/cpp2py/mako)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp2py/mako/xxx_wrap.cpp          DESTINATION  share/triqs/cpp2py/mako)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp2py/mako/xxx_desc.py           DESTINATION  share/triqs/cpp2py/mako)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp2py/mako/converters.hxx        DESTINATION  share/triqs/cpp2py/mako)

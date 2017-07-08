@@ -4,4 +4,4 @@ SET(PYTHON_SOURCES
 
 install (FILES ${PYTHON_SOURCES} DESTINATION ${TRIQS_PYTHON_LIB_DEST}/arrays)
 
-triqs_python_extension(block_matrix arrays)
+triqs_python_extension(block_matrix)

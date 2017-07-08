@@ -451,9 +451,8 @@ MESSAGE(STATUS "LibClang additional flags: ${TRIQS_LIBCLANG_CXX_ADDITIONAL_FLAGS
 set(TRIQS_LIBCLANG_CXX_ADDITIONAL_FLAGS "${TRIQS_LIBCLANG_CXX_ADDITIONAL_FLAGS}" CACHE STRING "Additional flags to be passed to libclang when parsing with clang")
 set(TRIQS_LIBCLANG_LOCATION "${TRIQS_LIBCLANG_LOCATION}" CACHE STRING "Location of the libclang library")
 #---------------------------------------------------------------------
-# pytriqs modules : MUST be before TRIQS, to have the py_converters
+# pytriqs modules 
 #---------------------------------------------------------------------
-
 if (PythonSupport)
  message( STATUS "-------- Preparing python extension modules  -------------")
  add_subdirectory(${TRIQS_SOURCE_DIR}/pytriqs )

@@ -1,5 +1,6 @@
 from wrap_generator import *
 
+
 # The many_body_operators module
 module = module_(full_name = "pytriqs.operators.operators", doc = "Doc to be written", app_name="triqs")
 module.add_include("<triqs/operators/many_body_operator.hpp>")
