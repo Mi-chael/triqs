@@ -41,6 +41,7 @@ def ffg( *args, **kw) :
     """ my doc of ffg in module """
     print "calling ffg, with :"
     print args
+    print self(3)
     print kw
     return tuple(2*x for x in args), kw
 
@@ -48,18 +49,11 @@ def post1(res) :
     #print "calling post1 inline"
     return [res]
 
-# First version uses the external module version, second inline
-#g.add_method(name = "m1p", c_name = "m1", signature = "double (int u, double y = 3)", doc = "DOC of mm", python_precall = "aux.ffg", python_postcall = "aux.post1")
-g.add_method(name = "m1p", c_name = "m1", signature = "double (int u, double y = 3)", doc = "DOC of mm", python_precall = ffg, python_postcall = post1)
-
 # demo of adding a simple piece of C++ code, there is no C++ method corresponding
 g.add_method(name = "m1_x", calling_pattern = "bool result = (self_c.x >0) && (self_c.x < 10)" , signature = "bool()", doc = "A method which did not exist in C++")
 
 #
 g.add_method(name = "sm", c_name = "sm", signature = "int (int u)", is_static = True, doc = "a static method")
-
-# alternative syntax 
-#g.add_method(name = "m1", python_precall = "aux.ffg", python_postcall = "aux.post1").add_overload(c_name = "m1", rtype = "double", doc = "DOC of mm", args = [("int","u"), ("double","y",3)])
 
 # older syntax, giving rtype and args (better for automatic scripts).
 g.add_method(name = "m1f", c_name = "m1", signature = "double(int u, double y=3)", doc = "DOC of mm")
@@ -81,7 +75,7 @@ def ffg2(self, *args, **kw) :
     """ my doc of the function ffg2 """
     print "calling ffg2 [inline], with :"
     print args
-    print self(3)
+    print self.sm(3)
     print kw
     #return [2*x for x in args], kw
     print dir()

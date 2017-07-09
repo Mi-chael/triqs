@@ -611,43 +611,6 @@ template <> struct py_converter<${en.c_name}> {
   PyObject * errors[${n_overload}] = {${",".join(n_overload*['NULL'])}}; //errors of the parsing attempts...
   %endif
 
-  %if py_meth.python_precall :
-    pyref res_py; // the intermediate result of the pretreatment
-
-    %if isinstance(py_meth.python_precall,python_function) :
-
-     /// A precall function where the code is given
-     static const char * _precall_code = ${py_meth.python_precall.code};
-     static pyref _precall_py_fnt, _precall_py_dict; // keep the function, contained in a specific local dict
-     if (_precall_py_fnt.is_null()) { // first init
-       PyObject* main_module = PyImport_AddModule("__main__"); //borrowed
-       PyObject* global_dict = PyModule_GetDict(main_module); //borrowed
-       _precall_py_dict = PyDict_New(); // new ref
-       if (!PyRun_String(_precall_code, Py_file_input, global_dict, _precall_py_dict)) goto error_return;
-       _precall_py_fnt = borrowed(PyDict_GetItemString(_precall_py_dict,"${py_meth.python_precall.name}"));
-     }
-
-    %else:
-
-      // get the module where the function is
-      static pyref module = pyref::module("${py_meth.python_precall.rsplit('.',1)[0]}");
-      if (module.is_null()) goto error_return;
-      // get the function (only once)
-      static pyref _precall_py_fnt = module.attr("${py_meth.python_precall.rsplit('.',1)[1]}");
-      // call the function : return must be a tuple args, kw to replace the current args, kw
-
-    %endif
-
-    res_py = PyObject_Call(_precall_py_fnt, args, keywds);
-    if (PyErr_Occurred()) goto error_return;
-    if (!PyTuple_Check(res_py) || (PyTuple_Size(res_py)!=2))
-        { PyErr_SetString(PyExc_RuntimeError,"${py_meth.python_precall} must return a tuple (args,kw) "); goto error_return; }
-    args = PyTuple_GetItem(res_py,0);
-    keywds = PyTuple_GetItem(res_py,1); // Borrowed ref, Cf res_py comment above.
-    if (!PyTuple_Check(args)) { PyErr_SetString(PyExc_RuntimeError,"${py_meth.python_precall}: return error : first element must be a tuple of arguments"); goto error_return; }
-    if (!PyDict_Check(keywds)) { PyErr_SetString(PyExc_RuntimeError,"${py_meth.python_precall}: return error : second element must be a dict"); goto error_return; }
-  %endif
-
   // If no overload, we avoid the err_list and let the error go through (to save some code).
   %for n_overload, overload in enumerate(py_meth.overloads) :
     {// overload ${overload._get_c_signature()}
@@ -742,34 +705,6 @@ template <> struct py_converter<${en.c_name}> {
    goto error_return;
 
   post_treatment:
-   %if py_meth.python_postcall :
-    if (py_result) { // should always be true
-
-    %if isinstance(py_meth.python_postcall,python_function) :
-
-     /// A postcall function where the code is given
-     static const char * _postcall_code = ${py_meth.python_postcall.code};
-     static pyref _postcall_py_fnt, _postcall_py_dict; // keep the function, contained in a specific local dict
-     if (_postcall_py_fnt.is_null()) { // first init
-       PyObject* main_module = PyImport_AddModule("__main__"); //borrowed
-       PyObject* global_dict = PyModule_GetDict(main_module); //borrowed
-       _postcall_py_dict = PyDict_New(); // new ref
-       if (!PyRun_String(_postcall_code, Py_file_input, global_dict, _postcall_py_dict)) goto error_return;
-       _postcall_py_fnt = borrowed(PyDict_GetItemString(_postcall_py_dict,"${py_meth.python_postcall.name}"));
-     }
-
-    %else:
-
-     static pyref module2 = pyref::module("${py_meth.python_postcall.rsplit('.',1)[0]}");
-     static pyref _postcall_py_fnt = module2.attr("${py_meth.python_postcall.rsplit('.',1)[1]}");
-
-    %endif
-
-     PyObject * res_final =  PyObject_CallFunctionObjArgs(_postcall_py_fnt, py_result, NULL);
-     Py_XDECREF(py_result);
-     py_result = res_final; // stealing the ref
-   }
-   %endif
 
    return ${'py_result' if not py_meth.is_constructor else '0'};
 
@@ -1137,15 +1072,6 @@ static void register_h5_reader_for_${c.py_type} () {
 
 %if op.arity == 2:
 static PyObject * ${c.py_type}_${op_name} (PyObject* v, PyObject *w){
-
- %if op.python_precall :
-    // get the function to call
-    static pyref py_fnt = pyref::module("${op.python_precall.rsplit('.',1)[0]}").attr("${op.python_precall.rsplit('.',1)[1]}");
-    // call the function : return must be a tuple args, kw to replace the current args, kw
-    pyref res = py_fnt(v,w);
-    if (!res.is_None()) return res.new_ref(); // new ref or NULL
-    // otherwise the precall has failed to make the operation, proceed with the overloads
- %endif
 
   %for overload in op.overloads :
   if (convertible_from_python<${overload.args[0][0]}>(v,false) && convertible_from_python<${overload.args[1][0]}>(w,false)) {

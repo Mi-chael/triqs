@@ -255,7 +255,7 @@ class pyfunction :
          - a list of overload
          - possibly some preprocessing/postprocessing python code.
     """
-    def __init__(self, name, arity = None, is_method = False, is_static = False, doc = '', python_precall = None, python_postcall = None):
+    def __init__(self, name, arity = None, is_method = False, is_static = False, doc = ''):
       """
         - name : name given in Python
         - arity : arity of the function
@@ -263,10 +263,6 @@ class pyfunction :
         - is_static : boolean. Is is a static method
         - doc : the doc string.
         - overloads : a list of cfunction objects representing the various C++ overloads of the function
-        - python_precall : a python function_ to be called before the call of the C++ function
-                           The function must take  F(*args, **kw) and return (args, kw)
-        - python_postcall : a python function_ to be called after the call of the C++ function
-                           The function must take a python object, and return one...
       """
       self.py_name =name       # name given in python
       self.arity = arity
@@ -275,7 +271,6 @@ class pyfunction :
       self.doc = doc
       def analyse(f):
           return python_function(f.__name__, f) if callable(f) else f
-      self.python_precall, self.python_postcall  = analyse(python_precall), analyse(python_postcall)
       self.overloads = [] # List of all C++ overloads
       self.do_implement = True # in some cases, we do not want to implement it automatically, (special methods).
       self.is_constructor = False
@@ -450,7 +445,7 @@ class class_ :
         one_op('*',"multiply","__imul__")
         one_op('/',"divide","__idiv__")
 
-    def add_constructor(self, signature, calling_pattern = None, python_precall = None, python_postcall = None, intermediate_type = None, doc = ''):
+    def add_constructor(self, signature, calling_pattern = None, intermediate_type = None, doc = ''):
         """
         Parameters
         ----------
@@ -472,16 +467,6 @@ class class_ :
               e.g., the default pattern is ::
               auto result = c_type (a,b,c)
         
-        python_precall : string
-          - A string of the type "module.function_name"
-            where function_name is a python function to be called before the call of the C++ function.
-          - It must take  F(*args, **kw) and return (args, kw)
-        
-        python_postcall : string
-          - A string of the type "module.function_name"
-            where function_name is a python function to be called after the call of the C++ function.
-          - The function must take a python object, and return one...
-       
         intermediate_type : string
           - Name of a C++ type to be used for constructing the object   
             which is then constructed as c_type { intermediate_type {....}}
@@ -502,12 +487,12 @@ class class_ :
           f._calling_pattern += "((%s *)self)->_c = new %s (%s);"%(self.py_type, self.c_type,all_args)
 
         if not self.constructor :
-            self.constructor =  pyfunction(name = "__init__", is_method = True, doc = doc, python_precall = python_precall, python_postcall = python_postcall)
+            self.constructor =  pyfunction(name = "__init__", is_method = True, doc = doc)
             self.constructor.is_constructor = True
         self.constructor.overloads.append(f)
 
     def add_method(self, signature, name =None, calling_pattern = None, no_self_c = False, is_method = False,  is_static = False,
-                  python_precall = None, python_postcall = None, doc = '', release_GIL_and_enable_signal = False, c_name = None):
+                   doc = '', release_GIL_and_enable_signal = False, c_name = None):
         """
         Add a C++ overload to a method of name name.
 
@@ -541,16 +526,6 @@ class class_ :
         is_method : boolean
         is_static : boolean
                     Is is a static method
-        python_precall : string
-          - A string of the type "module.function_name"
-            where function_name is a python function to be called before the call of the C++ function.
-          - It must take  F(*args, **kw) and return (args, kw)
-        
-        python_postcall : string
-          - A string of the type "module.function_name"
-            where function_name is a python function to be called after the call of the C++ function.
-          - The function must take a python object, and return one...
-        
         doc : string
               the doc string.
         
@@ -568,7 +543,7 @@ class class_ :
              is_method = True,  is_static = is_static, release_GIL_and_enable_signal = release_GIL_and_enable_signal, doc = doc, c_name = c_name or name)
         name = name or f.c_name
         if name not in self.methods :
-            self.methods[name] = pyfunction(name = name, is_method = True, is_static = is_static, doc = doc, python_precall = python_precall, python_postcall = python_postcall)
+            self.methods[name] = pyfunction(name = name, is_method = True, is_static = is_static, doc = doc)
         self.methods[name].overloads.append(f)
 
     def add_call(self, **kw) :
@@ -769,7 +744,7 @@ class module_ :
         if cls.py_type in self.classes : raise IndexError, "The class %s already exists"%cls.py_type
         self.classes[cls.py_type] = cls
 
-    def add_function(self, signature, name =None, calling_pattern = None, python_precall = None, python_postcall = None, doc = '', release_GIL_and_enable_signal = False):
+    def add_function(self, signature, name =None, calling_pattern = None,  doc = '', release_GIL_and_enable_signal = False):
         """
         Add a C++ overload to function of the module
 
@@ -798,16 +773,6 @@ class module_ :
             auto result = self_c.method_name(a,b,c).
           - If None, the signature must contain c_name
         
-        python_precall : string
-          - A string of the type "module.function_name"
-            where function_name is a python function to be called before the call of the C++ function.
-          - It must take  F(*args, **kw) and return (args, kw)
-
-        python_postcall : string
-          - A string of the type "module.function_name"
-            where function_name is a python function to be called after the call of the C++ function.
-          - The function must take a python object, and return one...
-
         doc : string
               the doc string.
         
@@ -824,7 +789,7 @@ class module_ :
         f = cfunction(signature, calling_pattern = calling_pattern, release_GIL_and_enable_signal = release_GIL_and_enable_signal, doc = doc,c_name = name)
         name = name or f.c_name
         if name not in self.functions :
-            self.functions[name] = pyfunction(name = name, doc = doc, python_precall = python_precall, python_postcall = python_postcall)
+            self.functions[name] = pyfunction(name = name, doc = doc)
         self.functions[name].overloads.append(f)
 
     def add_python_function(self, f, name = None, hidden = False) :
