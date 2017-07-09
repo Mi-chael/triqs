@@ -10,23 +10,6 @@ c_to_py_type = {'void' : 'None', 'int' : 'int', 'long' : 'int', 'double' : "floa
 # Translation for formatting of parsing converter.
 basic_types_formatting = {'double' : 'd', 'int' : 'i'}
 
-# List of type that can be converted
-convertible_types = set(['int', 'double', 'PyObject(\s*)*', 
-                         'matrix<(.*)>', 'matrix_view<(.*)>', 'matrix_const_view<(.*)>',  
-                         'array<(.*)>', 'array_view<(.*)>', 'array_view<(.*)>',
-                         'std::vector<(.*)>', ])
-
-def is_convertible(c_type):
-    """Bool : if the type can be converted, given the current imported modules"""
-    return True
-    print "trying to wrap ", c_type
-    for t in convertible_types : 
-        #print t, c_type
-        if re.match(t,c_type) : return True
-    for d in ImportHook.cpp2py_modules:
-        print d
-    return False
-
 # Translate the name of the c++ type to the python type.
 # for doc signatures.
 def translate_c_type_to_py_type(t) :
@@ -147,9 +130,6 @@ class cfunction :
         else : raise RuntimeError, "Syntax error in overload: args = %s"%args
         self.args.append([t.strip(),n.strip(),d])
       # end analyze signature
-      for a in args:
-          assert is_convertible(a[0]), "The type %s can not be converted from/to Python"%a[0]
-      assert self.rtype is None or is_convertible(self.rtype), "The return type %s can not be converted from/to Python"%self.rtype
 
       # ensure no variable starts with __
       for t,n,d in self.args : 
