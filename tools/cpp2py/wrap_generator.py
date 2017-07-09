@@ -36,14 +36,6 @@ def translate_c_type_to_py_type(t) :
     # numpy, etc...
     return t
 
-def _is_type_a_view(c_type):
-    """Is c_type a view type ? The criterion is a bit basic ..."""
-    return c_type.split('<', 1)[0].strip().endswith("_view") or c_type.endswith("::view_type")
-
-def _regular_type_if_view_else_type(c_type):
-    """Return the regular type if c_type is a view, or c_type otherwise"""
-    return "typename %s::regular_type"%c_type if _is_type_a_view(c_type) else c_type
-
 class cfunction :
     """
        Representation of one overload of a C++ function or method.
@@ -362,11 +354,7 @@ class class_ :
       """
       self.c_type = c_type
       self.c_type_absolute = c_type_absolute or c_type
-      self.c_type_is_view = _is_type_a_view(c_type)
-      self.implement_regular_type_converter = self.c_type_is_view # by default, it will also make the converter of the associated regular type
-      if self.c_type_is_view :
-          self.regular_type = 'typename ' +  self.c_type + '::regular_type'
-          self.regular_type_absolute = 'typename ' +  self.c_type_absolute  + '::regular_type'
+      self.implement_regular_type_converter = False # Default. Overrule with add_regular_type_converter
       self.py_type = py_type
       c_to_py_type[self.c_type] = self.py_type # register the name translation for the doc generation
       self.hdf5 = hdf5
@@ -444,6 +432,9 @@ class class_ :
 
           if with_inplace_operators : self.deduce_inplace_arithmetic()
 
+    def add_regular_type_converter(self): 
+        self.implement_regular_type_converter = True
+
     def deduce_inplace_arithmetic(self) :
         """Deduce all the +=, -=, *=, /= operators from the +, -, *, / operators"""
         def one_op(op, name, iname) :
@@ -459,7 +450,7 @@ class class_ :
         one_op('*',"multiply","__imul__")
         one_op('/',"divide","__idiv__")
 
-    def add_constructor(self, signature, calling_pattern = None, python_precall = None, python_postcall = None, build_from_regular_type_if_view = True, doc = ''):
+    def add_constructor(self, signature, calling_pattern = None, python_precall = None, python_postcall = None, intermediate_type = None, doc = ''):
         """
         Parameters
         ----------
@@ -481,12 +472,6 @@ class class_ :
               e.g., the default pattern is ::
               auto result = c_type (a,b,c)
         
-        build_from_regular_type_if_view : boolean.
-            - If True, and the type is a view, the wrapper calls the C++ constructor *of the corresponding regular type*.
-            - If False, it simply calls the constructor the C++ type.
-            - This allows to construct object which are wrapped by view (like gf e.g.), by calling the
-              constructor of the regular type, much simpler, than the view.
-        
         python_precall : string
           - A string of the type "module.function_name"
             where function_name is a python function to be called before the call of the C++ function.
@@ -496,7 +481,12 @@ class class_ :
           - A string of the type "module.function_name"
             where function_name is a python function to be called after the call of the C++ function.
           - The function must take a python object, and return one...
-        
+       
+        intermediate_type : string
+          - Name of a C++ type to be used for constructing the object   
+            which is then constructed as c_type { intermediate_type {....}}
+            E.g. Put a regular_type here when wrapping a view.
+
         doc : string
             the doc string.
         """
@@ -506,8 +496,8 @@ class class_ :
         f._calling_pattern = '' if f._dict_call is None else "if (!convertible_from_python<%s>(keywds,true)) goto error_return;\n"%f._dict_call
         if calling_pattern is not None :
           f._calling_pattern, all_args = calling_pattern + ';\n', "std::move(result)"
-        if self.c_type_is_view and build_from_regular_type_if_view :
-          f._calling_pattern += "((%s *)self)->_c = new %s(%s (%s));"%(self.py_type, self.c_type,_regular_type_if_view_else_type(self.c_type),all_args)
+        if intermediate_type: 
+          f._calling_pattern += "((%s *)self)->_c = new %s(%s (%s));"%(self.py_type, self.c_type, intermediate_type, all_args)
         else :
           f._calling_pattern += "((%s *)self)->_c = new %s (%s);"%(self.py_type, self.c_type,all_args)
 
@@ -918,7 +908,6 @@ class module_ :
         # call mako
         tpl = Template(filename=mako_template)
         rendered = tpl.render(module=self, 
-                   regular_type_if_view_else_type= _regular_type_if_view_else_type, # TO BE REMOVED 
                    python_function = python_function, 
                    sys_modules = sys.modules)
        

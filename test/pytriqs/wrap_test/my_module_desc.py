@@ -81,6 +81,7 @@ def ffg2(self, *args, **kw) :
     """ my doc of the function ffg2 """
     print "calling ffg2 [inline], with :"
     print args
+    print self(3)
     print kw
     #return [2*x for x in args], kw
     print dir()

@@ -3,6 +3,7 @@
 using dcomplex = std::complex<double>;
 
 #include <triqs/python_tools/wrapper_tools.hpp>
+#include <triqs/python_tools/converters/generics.hpp>
 
 //------------------------------------------------------------------------------------------------------
 //---------------------  First all the classes and enums wrapped by imported modules -------------------
@@ -299,21 +300,7 @@ typedef struct {
 static PyObject* ${c.py_type}_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
   ${c.py_type} *self;
   self = (${c.py_type} *)type->tp_alloc(type, 0);
-  if (self != NULL) {
-   try {
-   self->_c = NULL;
-   ##//%if not c.c_type_is_view :
-   ##// self->_c = new ${c.c_type}{};
-   ##//%else :
-   ##// self->_c = new ${c.c_type}{typename ${c.c_type}::regular_type{}}; // no default constructor for views
-   ##//%endif
-   }
-   catch (std::exception const & e) {
-    std::cout  << e.what()<<std::endl;
-    PyErr_SetString(PyExc_RuntimeError, "Default constructor of class ${c.py_type} is throwing an exception !");
-    return NULL;
-   }
-  }
+  if (self != NULL) self->_c = NULL;
   return (PyObject *)self;
 }
 %endif
@@ -556,14 +543,7 @@ template <> struct py_converter<${c.c_type}> {
 // TO BE MOVED IN GENERAL HPP
 %if c.implement_regular_type_converter :
  // ${c.py_type} is wrapping a view, we are also implementing the converter of the associated regular type
- template<> struct py_converter<${c.regular_type}> {
- using regular_type = ${c.regular_type};
- using conv = py_converter<${c.c_type}>;
- static PyObject *c2py(regular_type &g) { return conv::c2py(g); }
- static PyObject *c2py(regular_type &&g) { return conv::c2py(g); }
- static bool is_convertible(PyObject * ob, bool raise_exception) { return conv::is_convertible(ob, raise_exception); }
- static regular_type py2c(PyObject *ob) { return conv::py2c(ob); }
-};
+ template<> struct py_converter<${c.c_type}::regular_type> : py_converter_generic_cross_construction<${c.c_type}::regular_type, ${c.c_type}> {};
 %endif
 
 }} // namespace py_tools
@@ -953,11 +933,7 @@ static int ${c.py_type}___setitem__(PyObject *self, PyObject *key, PyObject *v) 
     PyObject* a1 = PyTuple_GetItem(args,0); // 
     auto a = convert_from_python<triqs::arrays::array_const_view<triqs::h5::h5_serialization_char_t,1>>(a1);
     try {
-     %if not c.c_type_is_view :
       return convert_to_python( triqs::deserialize<${c.c_type}>(a));
-     %else:
-      return convert_to_python( ${c.c_type} ( triqs::deserialize<typename ${c.c_type}::regular_type>(a)));
-     %endif
     }
     CATCH_AND_RETURN("in unserialization of object ${c.py_type}",NULL);
   }
@@ -983,11 +959,7 @@ static int ${c.py_type}___setitem__(PyObject *self, PyObject *key, PyObject *v) 
 //
  static PyObject* ${c.py_type}___reduce_reconstructor__ (PyObject *self, PyObject *args, PyObject *keywds) {
   try {
-    %if not c.c_type_is_view :
-      ${c.c_type} result;
-    %else:
-      typename ${c.c_type}::regular_type result;
-    %endif
+    triqs::regular_type_if_view_else_type_t<${c.c_type}> result;
     auto r = reconstructor{args};
     result.serialize(r,0);// make sure reconstructor is a friend as boost::serialization::access
     return convert_to_python(std::move(result));
@@ -1141,11 +1113,7 @@ static void register_h5_reader_for_${c.py_type} () {
   auto reader = [] (PyObject * h5_gr, std::string const & name) -> PyObject *{
    auto gr = convert_from_python<triqs::h5::group>(h5_gr);
    // declare the target C++ object, with special case if it is a view...
-   %if not c.c_type_is_view :
-     ${c.c_type} ret;
-   %else:
-     typename ${c.c_type}::regular_type ret;
-   %endif
+   triqs::regular_type_if_view_else_type_t<${c.c_type}> ret;
    try { // now read
      h5_read (gr, name, ret);
    }
@@ -1183,7 +1151,8 @@ static PyObject * ${c.py_type}_${op_name} (PyObject* v, PyObject *w){
   if (convertible_from_python<${overload.args[0][0]}>(v,false) && convertible_from_python<${overload.args[1][0]}>(w,false)) {
    try {
     %if not op_name.startswith("inplace") and not getattr(op, 'treat_as_inplace', False) :
-     ${regular_type_if_view_else_type(overload.rtype)} r = convert_from_python<${overload.args[0][0]}>(v) ${overload._get_calling_pattern()} convert_from_python<${overload.args[1][0]}>(w);
+     triqs::regular_type_if_view_else_type_t<${overload.rtype}> r = 
+           convert_from_python<${overload.args[0][0]}>(v) ${overload._get_calling_pattern()} convert_from_python<${overload.args[1][0]}>(w);
      return convert_to_python(std::move(r)); // in two steps to force type for expression templates in C++
     %else:
      convert_from_python<${overload.args[0][0]}>(v) ${overload._get_calling_pattern()} convert_from_python<${overload.args[1][0]}>(w);
@@ -1205,7 +1174,8 @@ static PyObject * ${c.py_type}_${op_name} (PyObject *v){
   %for overload in op.overloads :
   if (py_converter<${overload.args[0][0]}>::is_convertible(v,false)) {
    try {
-    ${regular_type_if_view_else_type(overload.rtype)} r = ${overload._get_calling_pattern()}(convert_from_python<${overload.args[0][0]}>(v));
+    triqs::regular_type_if_view_else_type_t<${overload.rtype}> r =
+         ${overload._get_calling_pattern()}(convert_from_python<${overload.args[0][0]}>(v));
     return convert_to_python(std::move(r)); // in two steps to force type for expression templates in C++
    }
    CATCH_AND_RETURN("in calling C++ overload \n  ${overload._get_c_signature()} \nin implementation of operator ${overload._get_calling_pattern()} ", NULL)

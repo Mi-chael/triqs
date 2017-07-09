@@ -56,6 +56,7 @@ for Target, Rvt, Rt, ext, n in zip(['scalar_valued', 'matrix_valued', 'tensor_va
                           [0,2,3,4]):
    
     c_type = '__tail_view<triqs::gfs::%s>'%Target
+    c_type_reg = '__tail<triqs::gfs::%s>'%Target
 
     t = class_( py_type = "TailGf"+ext,
             c_type = c_type,
@@ -65,9 +66,10 @@ for Target, Rvt, Rt, ext, n in zip(['scalar_valued', 'matrix_valued', 'tensor_va
             is_printable= True,
             arithmetic = ("algebra","double")
            )
-    
+
+    t.add_regular_type_converter()
     t.add_constructor(signature = "(triqs::utility::mini_vector<int,%s> target_shape, int n_order=10, int order_min=-1)"%n,
-                          doc = "Constructs a new tail, of matrix size N1xN2")
+                      intermediate_type = c_type_reg,   doc = "Constructs a new tail, of matrix size N1xN2")
  
     module.add_function("%s _make_tail_view_from_data(triqs::arrays::array_view<dcomplex, %s + 1> data)"%(c_type,n), 
                         calling_pattern = "%s result {data}"%c_type, doc = "Makes a new tail from a view of the data")
@@ -75,7 +77,7 @@ for Target, Rvt, Rt, ext, n in zip(['scalar_valued', 'matrix_valued', 'tensor_va
     # backward compat
     if Target == "matrix_valued":
         t.add_constructor(signature = "(int N1, int N2, int n_order=10, int order_min=-1)",
-                          doc = "Constructs a new tail, of matrix size N1xN2")
+                          intermediate_type = c_type_reg, doc = "Constructs a new tail, of matrix size N1xN2")
 
     t.add_property(name = "data",
                    getter = cfunction("array_view<dcomplex,%s+1> data()"%n),
